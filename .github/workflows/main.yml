@@ -1,0 +1,60 @@
+name: Demo7_GitHubActions
+
+on:
+  push:
+    paths:
+      - 'README.md'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create resource group
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            az group create --name myResourceGroup --location eastus
+
+      - name: Create storage account
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            az storage account create --name myStorageAccount --location eastus --resource-group myResourceGroup --sku Standard_LRS
+
+      - name: Get storage account key
+        id: storage_account_key
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            STORAGE_ACCOUNT_KEY=$(az storage account keys list --resource-group myResourceGroup --account-name myStorageAccount --query "[0].value" -o tsv)
+            echo "##vso[task.setvariable variable=STORAGE_ACCOUNT_KEY]$STORAGE_ACCOUNT_KEY"
+
+      - name: Create container
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            az storage container create --name myContainer --account-name myStorageAccount --account-key ${{ steps.storage_account_key.outputs.STORAGE_ACCOUNT_KEY }}
+
+      - name: Upload file to container
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            az storage blob upload --container-name myContainer --file README.md --name README.md --account-name myStorageAccount --account-key ${{ steps.storage_account_key.outputs.STORAGE_ACCOUNT_KEY }}
+
+      - name: List blobs in container
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.80
+          inlineScript: |
+            az storage blob list --container-name
